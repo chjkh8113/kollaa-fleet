@@ -635,12 +635,21 @@ done
 EOF
     
     # Execute on remote node
-    scp /tmp/node_info.sh "$SSH_USER@$node_ip:/tmp/"
-    ssh "$SSH_USER@$node_ip" "chmod +x /tmp/node_info.sh && /tmp/node_info.sh" | \
-        tee "$CONFIG_DIR/node_info_${node_ip}.txt"
+    if [[ "$AUTH_METHOD" == "1" ]]; then
+        # Use SSH key
+        scp -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" /tmp/node_info.sh "$SSH_USER@$node_ip:/tmp/"
+        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" "$SSH_USER@$node_ip" "chmod +x /tmp/node_info.sh && /tmp/node_info.sh" | \
+            tee "$CONFIG_DIR/node_info_${node_ip}.txt"
+        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" "$SSH_USER@$node_ip" "rm -f /tmp/node_info.sh"
+    elif [[ "$AUTH_METHOD" == "2" ]]; then
+        # Use password
+        sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no /tmp/node_info.sh "$SSH_USER@$node_ip:/tmp/"
+        sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no "$SSH_USER@$node_ip" "chmod +x /tmp/node_info.sh && /tmp/node_info.sh" | \
+            tee "$CONFIG_DIR/node_info_${node_ip}.txt"
+        sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no "$SSH_USER@$node_ip" "rm -f /tmp/node_info.sh"
+    fi
     
-    # Clean up
-    ssh "$SSH_USER@$node_ip" "rm -f /tmp/node_info.sh"
+    # Clean up local script
     rm -f /tmp/node_info.sh
 }
 
@@ -773,7 +782,29 @@ step_node_discovery() {
         # Test SSH first
         for ip in "${all_ips[@]}"; do
             if [[ "$AUTH_METHOD" == "1" ]]; then
-                if ssh -o ConnectTimeout=5 -i "$SSH_KEY_PATH" "$SSH_USER@$ip" "exit" 2>/dev/null; then
+                # Use the SSH key path provided by user
+                if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" "$SSH_USER@$ip" "exit" 2>/dev/null; then
+                    gather_node_info "$ip" "node"
+                else
+                    warning_message "Cannot SSH to $ip - skipping detailed info gathering"
+                    # Provide more detailed error information
+                    echo -e "${YELLOW}  Debug: ssh -i $SSH_KEY_PATH $SSH_USER@$ip${NC}"
+                    
+                    # Test SSH connectivity with verbose output
+                    echo -e "${CYAN}Testing SSH connectivity (this may show errors):${NC}"
+                    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" "$SSH_USER@$ip" "exit" 2>&1 | head -5
+                    
+                    echo ""
+                    echo -e "${YELLOW}  Possible solutions:${NC}"
+                    echo -e "${YELLOW}  1. Copy SSH key to remote host:${NC}"
+                    echo -e "${WHITE}     ssh-copy-id -i $SSH_KEY_PATH $SSH_USER@$ip${NC}"
+                    echo -e "${YELLOW}  2. Or manually add to authorized_keys on remote host${NC}"
+                    echo -e "${YELLOW}  3. Check if SSH service is running on port 22${NC}"
+                    echo -e "${YELLOW}  4. Verify firewall allows SSH connections${NC}"
+                fi
+            elif [[ "$AUTH_METHOD" == "2" ]]; then
+                # Use password authentication
+                if sshpass -p "$SSH_PASSWORD" ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "$SSH_USER@$ip" "exit" 2>/dev/null; then
                     gather_node_info "$ip" "node"
                 else
                     warning_message "Cannot SSH to $ip - skipping detailed info gathering"
