@@ -73,51 +73,113 @@ create_directories() {
     done
 }
 
+# Function to install missing dependencies
+install_dependencies() {
+    local deps_to_install=()
+    local package_map=""
+    
+    # Detect OS
+    if [[ -f /etc/redhat-release ]]; then
+        OS_TYPE="rhel"
+        # Package name mappings for RHEL-based systems
+        package_map="pip3:python3-pip"
+    elif [[ -f /etc/debian_version ]]; then
+        OS_TYPE="debian"
+        # Package name mappings for Debian-based systems
+        package_map="pip3:python3-pip"
+    else
+        OS_TYPE="unknown"
+    fi
+    
+    # Check each dependency
+    for dep in "$@"; do
+        # Get the correct package name
+        local pkg_name="$dep"
+        for mapping in $package_map; do
+            IFS=':' read -r cmd pkg <<< "$mapping"
+            if [[ "$dep" == "$cmd" ]]; then
+                pkg_name="$pkg"
+                break
+            fi
+        done
+        deps_to_install+=("$pkg_name")
+    done
+    
+    if [[ ${#deps_to_install[@]} -gt 0 ]]; then
+        echo ""
+        echo -e "${BLUE}Installing missing dependencies: ${deps_to_install[*]}${NC}"
+        
+        if [[ "$OS_TYPE" == "rhel" ]]; then
+            sudo dnf install -y "${deps_to_install[@]}" || sudo yum install -y "${deps_to_install[@]}"
+        elif [[ "$OS_TYPE" == "debian" ]]; then
+            sudo apt-get update && sudo apt-get install -y "${deps_to_install[@]}"
+        else
+            echo -e "${RED}Cannot automatically install dependencies on this OS${NC}"
+            return 1
+        fi
+        
+        echo -e "${GREEN}Dependencies installed successfully${NC}"
+    fi
+}
+
 # Function to check dependencies
 check_dependencies() {
     echo ""
     echo -e "${BLUE}Checking system dependencies...${NC}"
     
     local deps=(
-        "python3:Python 3"
-        "pip3:Pip 3"
-        "git:Git"
-        "ansible:Ansible (optional)"
-        "ssh:SSH client"
-        "sshpass:SSH password authentication (optional)"
-        "curl:Curl"
-        "wget:Wget"
+        "python3:Python 3:python3"
+        "pip3:Pip 3:python3-pip"
+        "git:Git:git"
+        "ansible:Ansible (optional):ansible"
+        "ssh:SSH client:openssh-clients"
+        "sshpass:SSH password authentication (optional):sshpass"
+        "curl:Curl:curl"
+        "wget:Wget:wget"
     )
     
     local missing=()
+    local optional_missing=()
     
     for dep in "${deps[@]}"; do
-        IFS=':' read -r cmd name <<< "$dep"
+        IFS=':' read -r cmd name pkg <<< "$dep"
         if command -v "$cmd" &> /dev/null; then
             echo -e "${GREEN}✓ $name${NC}"
         else
             echo -e "${RED}✗ $name${NC}"
-            if [[ ! "$cmd" =~ ^(ansible|sshpass)$ ]]; then
+            if [[ "$name" =~ "optional" ]]; then
+                optional_missing+=("$cmd")
+            else
                 missing+=("$cmd")
             fi
         fi
     done
     
+    # Try to install missing required dependencies
     if [[ ${#missing[@]} -gt 0 ]]; then
         echo ""
         echo -e "${YELLOW}Missing required dependencies: ${missing[*]}${NC}"
-        echo -e "${YELLOW}Please install them before running the installer${NC}"
         
-        # Provide installation commands based on OS
-        if [[ -f /etc/redhat-release ]]; then
-            echo ""
-            echo -e "${CYAN}For RHEL/CentOS/Rocky:${NC}"
-            echo "sudo dnf install -y ${missing[*]}"
-        elif [[ -f /etc/debian_version ]]; then
-            echo ""
-            echo -e "${CYAN}For Debian/Ubuntu:${NC}"
-            echo "sudo apt-get update && sudo apt-get install -y ${missing[*]}"
+        # Check if we have sudo access
+        if sudo -n true 2>/dev/null; then
+            echo -e "${BLUE}Attempting to install missing dependencies...${NC}"
+            install_dependencies "${missing[@]}"
+        else
+            echo -e "${CYAN}Enter sudo password to install dependencies:${NC}"
+            if sudo true; then
+                install_dependencies "${missing[@]}"
+            else
+                echo -e "${RED}Cannot install dependencies without sudo access${NC}"
+                return 1
+            fi
         fi
+    fi
+    
+    # Just inform about optional dependencies
+    if [[ ${#optional_missing[@]} -gt 0 ]]; then
+        echo ""
+        echo -e "${YELLOW}Optional dependencies not installed: ${optional_missing[*]}${NC}"
+        echo -e "${CYAN}These can be installed later if needed${NC}"
     fi
 }
 
@@ -191,7 +253,6 @@ main() {
     echo -e "${WHITE}  ./install.sh${NC}              # Configuration wizard"
     echo -e "${WHITE}  ./rollback.sh${NC}             # Rollback system"
     echo ""
-    echo -e "${YELLOW}Note: Run as a regular user with sudo privileges, not as root${NC}"
 }
 
 # Check if running as root
