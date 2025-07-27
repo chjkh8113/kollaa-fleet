@@ -6,6 +6,10 @@ set -euo pipefail
 
 # Source the main installer functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Ensure directories exist before sourcing
+mkdir -p "$SCRIPT_DIR/deployment-config"
+
 source "$SCRIPT_DIR/install.sh" 2>/dev/null || true
 
 # Additional deployment functions

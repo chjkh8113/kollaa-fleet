@@ -29,6 +29,19 @@ INVENTORY_FILE="$CONFIG_DIR/multinode"
 GLOBALS_FILE="$CONFIG_DIR/globals.yml"
 PASSWORDS_FILE="$CONFIG_DIR/passwords.yml"
 
+# Create necessary directories early
+mkdir -p "$CONFIG_DIR"
+mkdir -p "$SCRIPT_DIR/scripts"
+mkdir -p "$SCRIPT_DIR/inventories"
+mkdir -p "$SCRIPT_DIR/environments/dev"
+mkdir -p "$SCRIPT_DIR/environments/staging"
+mkdir -p "$SCRIPT_DIR/environments/production"
+mkdir -p "$SCRIPT_DIR/templates"
+mkdir -p "$SCRIPT_DIR/docs"
+
+# Ensure all .sh files are executable
+find "$SCRIPT_DIR" -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
+
 # Step tracking
 TOTAL_STEPS=15
 CURRENT_STEP=0
@@ -58,6 +71,8 @@ done
 
 # Logging function
 log() {
+    # Ensure log directory exists
+    mkdir -p "$(dirname "$LOG_FILE")"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
 
@@ -208,8 +223,20 @@ step_environment_setup() {
     update_step 0 "IN_PROGRESS"
     log "Starting environment setup"
     
-    # Create config directory
+    # Create all necessary directories
+    info_message "Creating required directories..."
     mkdir -p "$CONFIG_DIR"
+    mkdir -p "$SCRIPT_DIR/scripts"
+    mkdir -p "$SCRIPT_DIR/inventories"
+    mkdir -p "$SCRIPT_DIR/environments/dev"
+    mkdir -p "$SCRIPT_DIR/environments/staging"
+    mkdir -p "$SCRIPT_DIR/environments/production"
+    mkdir -p "$SCRIPT_DIR/templates"
+    mkdir -p "$SCRIPT_DIR/docs"
+    
+    # Ensure all scripts are executable
+    info_message "Setting executable permissions on scripts..."
+    find "$SCRIPT_DIR" -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
     
     # Check if running as non-root
     if [[ $EUID -eq 0 ]]; then
@@ -222,6 +249,19 @@ step_environment_setup() {
         if ! sudo true; then
             error_exit "This script requires sudo privileges"
         fi
+    fi
+    
+    # Check required commands
+    local missing_commands=()
+    for cmd in python3 pip3 git ansible ssh sshpass; do
+        if ! command -v "$cmd" &> /dev/null; then
+            missing_commands+=("$cmd")
+        fi
+    done
+    
+    if [[ ${#missing_commands[@]} -gt 0 ]]; then
+        warning_message "Missing commands: ${missing_commands[*]}"
+        warning_message "Some functionality may be limited"
     fi
     
     success_message "Environment setup completed"

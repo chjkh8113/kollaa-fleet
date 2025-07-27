@@ -35,11 +35,21 @@ This project simplifies the deployment of OpenStack using Kolla-Ansible on bare 
 
 1. **Clone this repository**
    ```bash
-   git clone https://github.com/yourusername/kollaa-fleet.git
+   git clone https://github.com/chjkh8113/kollaa-fleet.git
    cd kollaa-fleet
    ```
 
-2. **Run the interactive installer**
+2. **Run initial setup (first time only)**
+   ```bash
+   ./setup.sh
+   ```
+   This will:
+   - Set executable permissions on all scripts
+   - Create required directories
+   - Check system dependencies
+   - Verify file integrity
+
+3. **Run the interactive installer**
    ```bash
    ./deploy-openstack.sh
    ```

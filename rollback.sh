@@ -9,6 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="$SCRIPT_DIR/deployment-config"
 LOG_FILE="$CONFIG_DIR/rollback.log"
 
+# Create config directory if it doesn't exist
+mkdir -p "$CONFIG_DIR"
+
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
