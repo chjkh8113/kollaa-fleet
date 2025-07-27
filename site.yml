@@ -1,0 +1,144 @@
+---
+# Main Ansible playbook for Kollaa Fleet
+# This playbook provides wrapper tasks around Kolla-Ansible operations
+
+- name: Pre-deployment validation
+  hosts: all
+  gather_facts: yes
+  tags:
+    - validate
+  tasks:
+    - name: Check Python interpreter
+      ansible.builtin.ping:
+      
+    - name: Validate OS distribution
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution in ['Rocky', 'CentOS', 'Debian', 'Ubuntu']
+        fail_msg: "Unsupported OS: {{ ansible_distribution }}"
+        
+    - name: Check minimum memory
+      ansible.builtin.assert:
+        that:
+          - ansible_memtotal_mb >= 8192
+        fail_msg: "Insufficient memory: {{ ansible_memtotal_mb }}MB (minimum 8192MB)"
+        
+    - name: Check network interfaces
+      ansible.builtin.assert:
+        that:
+          - ansible_interfaces | length >= 3  # Including lo
+        fail_msg: "Insufficient network interfaces"
+
+- name: Prepare networking
+  hosts: all
+  become: yes
+  tags:
+    - network
+  tasks:
+    - name: Ensure NetworkManager is not managing OpenStack interfaces
+      when: ansible_os_family == "RedHat"
+      block:
+        - name: Check if NetworkManager is installed
+          ansible.builtin.command: systemctl is-active NetworkManager
+          register: nm_status
+          failed_when: false
+          changed_when: false
+          
+        - name: Configure NetworkManager to ignore OpenStack interfaces
+          when: nm_status.rc == 0
+          ansible.builtin.lineinfile:
+            path: /etc/NetworkManager/conf.d/99-openstack.conf
+            line: |
+              [keyfile]
+              unmanaged-devices=interface-name:br-*;interface-name:veth*;interface-name:tap*
+            create: yes
+            
+    - name: Enable IP forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+- name: Configure Docker
+  hosts: all
+  become: yes
+  tags:
+    - docker
+  tasks:
+    - name: Create Docker directory
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        mode: '0755'
+        
+    - name: Configure Docker daemon
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "storage-driver": "overlay2",
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            },
+            "live-restore": true
+          }
+        mode: '0644'
+      notify: restart docker
+      
+  handlers:
+    - name: restart docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+        enabled: yes
+
+- name: Setup Kolla configuration directory
+  hosts: all
+  become: yes
+  tags:
+    - kolla-config
+  tasks:
+    - name: Create /etc/kolla directory
+      ansible.builtin.file:
+        path: /etc/kolla
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+- name: Generate passwords
+  hosts: localhost
+  tags:
+    - passwords
+  tasks:
+    - name: Check if passwords.yml exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/environments/{{ env | default('production') }}/passwords.yml"
+      register: passwords_file
+      
+    - name: Generate passwords if not exists
+      when: not passwords_file.stat.exists
+      ansible.builtin.shell: |
+        kolla-genpwd -p {{ playbook_dir }}/environments/{{ env | default('production') }}/passwords.yml
+      args:
+        creates: "{{ playbook_dir }}/environments/{{ env | default('production') }}/passwords.yml"
+
+- name: Display deployment information
+  hosts: localhost
+  tags:
+    - info
+  tasks:
+    - name: Show next steps
+      ansible.builtin.debug:
+        msg:
+          - "Pre-deployment tasks completed!"
+          - "Next steps:"
+          - "1. Review and edit environments/{{ env | default('production') }}/globals.yml"
+          - "2. Run: kolla-ansible -i {{ inventory_file }} bootstrap-servers"
+          - "3. Run: kolla-ansible -i {{ inventory_file }} prechecks"
+          - "4. Run: kolla-ansible -i {{ inventory_file }} deploy"
+          - "5. Run: kolla-ansible -i {{ inventory_file }} post-deploy"

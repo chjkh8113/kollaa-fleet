@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Ansible
+*.retry
+ansible.log
+
+# Kolla-Ansible
+passwords.yml
+environments/*/passwords.yml
+/etc/kolla/
+*.pem
+*.key
+*.crt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+*.tmp
+*.temp
+
+# Logs
+*.log
+logs/
+
+# Generated documentation
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Inventory files (except examples)
+inventories/*.yml
+!inventories/*.yml.example
+
+# Environment specific globals (except examples)
+environments/*/globals.yml
+!environments/*/globals.yml.example

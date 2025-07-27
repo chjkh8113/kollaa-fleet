@@ -1,0 +1,150 @@
+# Ansible inventory file for multi-node OpenStack deployment
+# This is an example inventory for a typical 3-controller, 2-compute deployment
+# Copy this file to multinode.yml and modify according to your environment
+
+[control]
+# Control nodes run OpenStack control plane services
+control01 ansible_host=10.0.0.11 ansible_user=root
+control02 ansible_host=10.0.0.12 ansible_user=root
+control03 ansible_host=10.0.0.13 ansible_user=root
+
+[network]
+# Network nodes handle Neutron L3 agent and metadata services
+# Can be the same as control nodes for smaller deployments
+control01 ansible_host=10.0.0.11 ansible_user=root
+control02 ansible_host=10.0.0.12 ansible_user=root
+control03 ansible_host=10.0.0.13 ansible_user=root
+
+[compute]
+# Compute nodes run Nova compute service and hypervisor
+compute01 ansible_host=10.0.0.21 ansible_user=root
+compute02 ansible_host=10.0.0.22 ansible_user=root
+
+[monitoring]
+# Monitoring nodes run Prometheus, Grafana, etc.
+# Can be the same as control nodes
+control01 ansible_host=10.0.0.11 ansible_user=root
+
+[storage]
+# Storage nodes run Cinder volume services
+# Comment out if using external storage
+storage01 ansible_host=10.0.0.31 ansible_user=root
+storage02 ansible_host=10.0.0.32 ansible_user=root
+storage03 ansible_host=10.0.0.33 ansible_user=root
+
+[deployment]
+# Deployment node runs Kolla-Ansible
+# This should be where you're running ansible from
+localhost ansible_connection=local
+
+# Kolla-Ansible groups - DO NOT MODIFY group names
+[baremetal:children]
+control
+network
+compute
+storage
+monitoring
+
+# You can explicitly specify which services run on which hosts
+[mariadb:children]
+control
+
+[rabbitmq:children]
+control
+
+[memcached:children]
+control
+
+[keystone:children]
+control
+
+[glance:children]
+control
+
+[nova:children]
+control
+
+[neutron:children]
+network
+
+[openvswitch:children]
+network
+compute
+
+[cinder:children]
+control
+
+[cinder-volume:children]
+storage
+
+[horizon:children]
+control
+
+[heat:children]
+control
+
+[placement:children]
+control
+
+[chrony-server:children]
+control
+
+[chrony:children]
+control
+network
+compute
+storage
+monitoring
+
+# Monitoring
+[prometheus:children]
+monitoring
+
+[grafana:children]
+monitoring
+
+# Additional services can be added as needed
+# [ironic:children]
+# control
+
+# [octavia:children]
+# control
+
+# [barbican:children]
+# control
+
+# HAProxy load balancer
+[haproxy:children]
+control
+
+# Elasticsearch/OpenSearch for logging
+[opensearch:children]
+control
+
+# Define global variables for all hosts
+[all:vars]
+# SSH connection settings
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+ansible_python_interpreter=/usr/bin/python3
+
+# Kolla-Ansible settings
+# These can be overridden in group_vars or host_vars
+kolla_base_distro=rocky
+kolla_install_type=source
+
+# Network interface names - adjust according to your hardware
+network_interface=eth0
+neutron_external_interface=eth1
+api_interface={{ network_interface }}
+tunnel_interface={{ network_interface }}
+
+# Internal VIP configuration
+kolla_internal_vip_address=10.0.0.10
+kolla_external_vip_address=192.168.1.10
+
+# Enable additional services as needed
+# enable_haproxy=yes
+# enable_cinder=yes
+# enable_heat=yes
+# enable_horizon=yes
+# enable_neutron_provider_networks=yes
